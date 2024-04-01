@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import time
 
+
 class DummyModel(nn.Module):
     def __init__(self):
         super(DummyModel, self).__init__()
@@ -14,11 +15,12 @@ class DummyModel(nn.Module):
             nn.Linear(1024, 1024),
             nn.Linear(1024, 1024),
             nn.Linear(1024, 50),
-            nn.Linear(50, 10)
+            nn.Linear(50, 10),
         )
 
     def forward(self, x):
         return self.fc(x)
+
 
 def train(model, device, epochs=5):
     criterion = nn.CrossEntropyLoss()
@@ -37,7 +39,8 @@ def train(model, device, epochs=5):
     print(loss)
     return end_time - start_time
 
-device = torch.device('cuda:0')
+
+device = torch.device("cuda:0")
 model = DummyModel().to(device)
 time_taken_single_gpu = train(model, device)
 print(f"Time taken on single GPU: {time_taken_single_gpu:.2f} seconds")
@@ -45,8 +48,8 @@ print(f"Time taken on single GPU: {time_taken_single_gpu:.2f} seconds")
 if torch.cuda.device_count() > 1:
     model = DummyModel()
     model = nn.DataParallel(model)
-    model.to('cuda')
-    time_taken_multi_gpu = train(model, 'cuda')
+    model.to("cuda")
+    time_taken_multi_gpu = train(model, "cuda")
     print(f"Time taken on multiple GPUs: {time_taken_multi_gpu:.2f} seconds")
 else:
     print("Multiple GPUs are not available.")

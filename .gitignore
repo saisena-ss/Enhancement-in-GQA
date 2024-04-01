@@ -2,3 +2,5 @@ __pycache__
 wandb
 MODEL
 MODEL2
+gqa-env
+pubmed-dataset
