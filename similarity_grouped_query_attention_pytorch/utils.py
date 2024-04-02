@@ -160,7 +160,34 @@ def train(
             model_inputs["labels"] = labels["input_ids"]
         elif dataset_name == "pubmed":
             prefix = "summarize: "
-            NotImplementedError()
+            inputs = [prefix + doc for doc in examples["article"]]
+            model_inputs = tokenizer(
+                inputs, max_length=max_input_length, truncation=True, padding=True
+            )
+
+            # Setup the tokenizer for targets
+            labels = tokenizer(
+                text_target=examples["abstract"],
+                max_length=max_target_length,
+                truncation=True,
+            )
+
+            model_inputs["labels"] = labels["input_ids"]
+        elif dataset_name == "arxiv":
+            prefix = "summarize: "
+            inputs = [prefix + doc for doc in examples["article"]]
+            model_inputs = tokenizer(
+                inputs, max_length=max_input_length, truncation=True, padding=True
+            )
+
+            # Setup the tokenizer for targets
+            labels = tokenizer(
+                text_target=examples["abstract"],
+                max_length=max_target_length,
+                truncation=True,
+            )
+
+            model_inputs["labels"] = labels["input_ids"]
         elif dataset_name == "multi_news":
             prefix = "summarize: "
             inputs = [prefix + doc for doc in examples["document"]]
@@ -194,24 +221,29 @@ def train(
 
     data_dir = "data"
 
-    train_data = load_dataset(
-        dataset_name,  split=f"train[:{config.PERCENT_DATA}%]"
-    )
-    # cnn_data_train = load_dataset(
-    #     "cnn_dailymail", data_dir=data_dir, split=f"train[:{config.PERCENT_DATA}%]"
-    # )
-    test_data = load_dataset(
-        dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
-    )
-    # cnn_data_test = load_dataset(
-    #     "cnn_dailymail", data_dir=data_dir, split=f"test[:{config.PERCENT_DATA}%]"
-    # )
-    val_data = load_dataset(
-        dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
-    )
-    # cnn_data_val = load_dataset(
-    #     "cnn_dailymail", data_dir=data_dir, split=f"validation[:{config.PERCENT_DATA}%]"
-    # )
+    if dataset_name == "pubmed" or dataset_name == "arxiv":
+        train_data = load_dataset(
+            dataset_name,dataset_name,split=f"train[:{config.PERCENT_DATA}%]"
+        )
+        test_data = load_dataset(
+            dataset_name,dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
+        )
+        val_data = load_dataset(
+            dataset_name,dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
+        )
+    else:
+        train_data = load_dataset(
+            dataset_name,  split=f"train[:{config.PERCENT_DATA}%]"
+        )
+
+        test_data = load_dataset(
+            dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
+        )
+
+        val_data = load_dataset(
+            dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
+        )
+
     if dataset_name == "wmt14":
         remove_columns = ["translation"]
     elif dataset_name == "multi_news":
