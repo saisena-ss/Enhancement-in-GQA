@@ -98,8 +98,8 @@ class WeightT5SelfAttention(T5Attention):
             self.wk1 = nn.Parameter(torch.randn((self.n_heads, 1)))
             self.wv1 = nn.Parameter(torch.randn((self.n_heads, 1)))
         else:
-            self.wk1 = nn.Parameter(torch.full((self.n_heads, 1), 0.5))
-            self.wv1 = nn.Parameter(torch.full((self.n_heads, 1), 0.5))
+            self.wk1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
+            self.wv1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
             #     self.params = nn.ParameterDict({
         #         f"key": nn.Parameter(torch.randn((self.n_heads,1))),
         #         f"value": nn.Parameter(torch.randn((self.n_heads,1))),
