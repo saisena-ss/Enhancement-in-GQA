@@ -382,7 +382,7 @@ def train(
             loss.backward()
             epoch_train_loss.append(loss.item())
             optimizer.step()
-            lr_scheduler.step()
+            # lr_scheduler.step()
             optimizer.zero_grad()
             progress_bar.update(1)
             steps += 1
