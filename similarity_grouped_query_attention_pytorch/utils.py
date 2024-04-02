@@ -248,8 +248,8 @@ def train(
         remove_columns = ["translation"]
     elif dataset_name == "multi_news":
         remove_columns = ["document", "summary"]
-    elif dataset_name == "pubmed":
-        # remove_columns = ["highlights"]
+    elif dataset_name == "pubmed" or dataset_name == "arxiv":
+        remove_columns = ["article","abstract"]
         pass
     elif dataset_name == "cnn_dailymail":
         remove_columns=["article", "highlights", "id"]
