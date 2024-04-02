@@ -64,11 +64,34 @@ def compute_metrics(predictions, labels, tokenizer, metric):
     return {k: round(v, 4) for k, v in result.items()}
 
 
+def compute_bleu_metric(preds,labels,tokenizer,metric):
+    if isinstance(preds, tuple):
+        preds = preds[0]
+    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+    decoded_preds = [pred.strip() for pred in decoded_preds]
+    decoded_labels = [label.strip() for label in decoded_labels]
+    print(decoded_preds)
+    print('Decoded labels')
+    print(decoded_labels)
+    result = metric.compute(predictions=decoded_preds, references=decoded_labels)
+    print(result)
+    result = {"bleu": result["bleu"]}
+
+    prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
+    result["gen_len"] = np.mean(prediction_lens)
+    result = {k: round(v, 4) for k, v in result.items()}
+    return result
+    
+
 def get_avg(eval_dict_list, key_name: str):
     return sum(d[key_name] for d in eval_dict_list) / len(eval_dict_list)
 
 
-def validation_loop(t5, tokenizer, metric, eval_dataloader, step, device):
+def validation_loop(t5, tokenizer, metric, eval_dataloader, step, device,dataset_name):
     epoch_eval_loss = []
     eval_dict_list = []
     print(f"Started evaluation for step {step}")
@@ -80,29 +103,44 @@ def validation_loop(t5, tokenizer, metric, eval_dataloader, step, device):
         eval_batch_pred_tensors = t5.module.generate(
             eval_batch["input_ids"], max_length=config.MAX_TARGET_LENGTH
         )
-        val_rouge_step_metric = compute_metrics(
-            eval_batch_pred_tensors.cpu(), eval_batch["labels"].cpu(), tokenizer, metric
-        )
+        if dataset_name == "wmt14":
+            val_rouge_step_metric = compute_bleu_metric(eval_batch_pred_tensors.cpu(), 
+                                                        eval_batch["labels"].cpu(), tokenizer, metric)
+        else:
+
+            val_rouge_step_metric = compute_metrics(
+                eval_batch_pred_tensors.cpu(), eval_batch["labels"].cpu(), tokenizer, metric
+            )
         eval_dict_list.append(val_rouge_step_metric)
     mean_eval_loss = sum(epoch_eval_loss) / len(epoch_eval_loss)
     return mean_eval_loss, eval_dict_list
 
 
-def testing_loop(t5, tokenizer, metric, test_dataloader, device):
+def testing_loop(t5, tokenizer, metric, test_dataloader, device,dataset_name):
     test_dict_list = []
     for test_batch in test_dataloader:
         test_batch = {k: v.to(device) for k, v in test_batch.items()}
         test_batch_pred_tensors = t5.module.generate(
             test_batch["input_ids"], max_length=config.MAX_TARGET_LENGTH
         )
-        test_dict_list.append(
-            compute_metrics(
+        if dataset_name == "wmt14":
+            test_dict_list.append(
+            compute_bleu_metric(
                 test_batch_pred_tensors.cpu(),
                 test_batch["labels"].cpu(),
                 tokenizer,
                 metric,
             )
         )
+        else:
+            test_dict_list.append(
+                compute_metrics(
+                    test_batch_pred_tensors.cpu(),
+                    test_batch["labels"].cpu(),
+                    tokenizer,
+                    metric,
+                )
+            )
 
     return test_dict_list
 
@@ -162,13 +200,13 @@ def train(
             prefix = "summarize: "
             inputs = [prefix + doc for doc in examples["article"]]
             model_inputs = tokenizer(
-                inputs, max_length=max_input_length, truncation=True, padding=True
+                inputs, max_length=2048, truncation=True, padding=True
             )
 
             # Setup the tokenizer for targets
             labels = tokenizer(
                 text_target=examples["abstract"],
-                max_length=max_target_length,
+                max_length=512,
                 truncation=True,
             )
 
@@ -177,13 +215,13 @@ def train(
             prefix = "summarize: "
             inputs = [prefix + doc for doc in examples["article"]]
             model_inputs = tokenizer(
-                inputs, max_length=max_input_length, truncation=True, padding=True
+                inputs, max_length=2048, truncation=True, padding=True
             )
 
             # Setup the tokenizer for targets
             labels = tokenizer(
                 text_target=examples["abstract"],
-                max_length=max_target_length,
+                max_length=512,
                 truncation=True,
             )
 
@@ -192,20 +230,20 @@ def train(
             prefix = "summarize: "
             inputs = [prefix + doc for doc in examples["document"]]
             model_inputs = tokenizer(
-                inputs, max_length=max_input_length, truncation=True, padding=True
+                inputs, max_length=2048, truncation=True, padding=True
             )
 
             # Setup the tokenizer for targets
             labels = tokenizer(
                 text_target=examples["summary"],
-                max_length=max_target_length,
+                max_length=512,
                 truncation=True,
             )
 
             model_inputs["labels"] = labels["input_ids"]
         elif dataset_name == "wmt14":
             prefix = "translate german to english: "
-            inputs = [prefix + doc for doc in examples["translation"]["en"]]
+            inputs = [prefix + doc['en'] for doc in examples["translation"]]
             model_inputs = tokenizer(
                 inputs, max_length=max_input_length, truncation=True, padding=True
             )
@@ -231,6 +269,17 @@ def train(
         val_data = load_dataset(
             dataset_name,dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
         )
+    elif dataset_name == "wmt14":
+        train_data = load_dataset(
+            "stas/wmt14-en-de-pre-processed",  split=f"train[:{config.PERCENT_DATA}%]"
+        )
+        test_data = load_dataset(
+            "stas/wmt14-en-de-pre-processed", split=f"test[:{config.PERCENT_DATA}%]"
+        )
+
+        val_data = load_dataset(
+            "stas/wmt14-en-de-pre-processed", split=f"validation[:{config.PERCENT_DATA}%]"
+        )
     else:
         train_data = load_dataset(
             dataset_name,  split=f"train[:{config.PERCENT_DATA}%]"
@@ -250,11 +299,11 @@ def train(
         remove_columns = ["document", "summary"]
     elif dataset_name == "pubmed" or dataset_name == "arxiv":
         remove_columns = ["article","abstract"]
-        pass
     elif dataset_name == "cnn_dailymail":
         remove_columns=["article", "highlights", "id"]
     elif dataset_name == "trivia_qa":
         remove_columns=[]
+
     tokenized_datasets_train = train_data.map(
         preprocess_function,
         batched=True,
@@ -306,8 +355,10 @@ def train(
         num_warmup_steps=0,
         num_training_steps=num_training_steps,
     )
-
-    metric = load("rouge")
+    if dataset_name == "wmt14":
+        metric = load("bleu")
+    else:
+        metric = load("rouge")
 
     progress_bar = tqdm(range(num_training_steps))
     val_rouge_dict = {
@@ -369,7 +420,7 @@ def train(
         t5.eval()
         if rank == 0:
             mean_eval_loss, eval_dict_list = validation_loop(
-                t5, tokenizer, metric, eval_dataloader, steps, device
+                t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
             )
             key_names = eval_dict_list[0].keys()
             average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
@@ -386,11 +437,14 @@ def train(
         if rank == 0:
             print(f"Started testing for step {steps}")
             test_dict_list = testing_loop(
-                t5, tokenizer, metric, test_dataloader, device
+                t5, tokenizer, metric, test_dataloader, device,dataset_name
             )
             key_names = test_dict_list[0].keys()
             test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
-            print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
+            if dataset_name=='wmt14':
+                print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
+            else:
+                print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
             run.log(
                 {
                     f"{logging_name.lower()}_test_epoch_" + k: v
