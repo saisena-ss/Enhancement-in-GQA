@@ -10,8 +10,8 @@
 #SBATCH --gpus v100:1
 #SBATCH --mail-type=FAIL,BEGIN,END
 #SBATCH --job-name=GQA
-#SBATCH --output=gqa_val_out.txt
-#SBATCH --error=gqa_val_err.txt
+#SBATCH --output=cnn_wgqa_val_out.txt
+#SBATCH --error=cnn_wgqa_val_err.txt
 #SBATCH -A students
 
 ######  Module commands #####
