@@ -177,7 +177,7 @@ def train(
 
     def preprocess_function(
         examples,
-        dataset_name: str,
+        dataset_name:str = dataset_name,
         max_input_length: int = config.MAX_INPUT_LENGTH,
         max_target_length: int = config.MAX_TARGET_LENGTH,
     ):
