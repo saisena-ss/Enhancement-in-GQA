@@ -261,13 +261,13 @@ def train(
 
     if dataset_name == "pubmed" or dataset_name == "arxiv":
         train_data = load_dataset(
-            dataset_name,dataset_name,split=f"train[:{config.PERCENT_DATA}%]"
+            "scientific_papers",dataset_name,split=f"train[:{config.PERCENT_DATA}%]"
         )
         test_data = load_dataset(
-            dataset_name,dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
+            "scientific_papers",dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
         )
         val_data = load_dataset(
-            dataset_name,dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
+            "scientific_papers",dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
         )
     elif dataset_name == "wmt14":
         train_data = load_dataset(
@@ -279,6 +279,17 @@ def train(
 
         val_data = load_dataset(
             "stas/wmt14-en-de-pre-processed", split=f"validation[:{config.PERCENT_DATA}%]"
+        )
+    elif dataset_name == "cnn_dailymail":
+        train_data = load_dataset(
+            "cnn_dailymail",'3.0.0',   split=f"train[:{config.PERCENT_DATA}%]"
+        )
+        test_data = load_dataset(
+            "cnn_dailymail",'3.0.0', split=f"test[:{config.PERCENT_DATA}%]"
+        )
+
+        val_data = load_dataset(
+            "cnn_dailymail",'3.0.0', split=f"validation[:{config.PERCENT_DATA}%]"
         )
     else:
         train_data = load_dataset(
