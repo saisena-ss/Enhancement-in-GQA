@@ -221,10 +221,10 @@ class WeightT5SelfAttention(T5Attention):
         ).sum(axis=1)
 
         mod_k = mod_k.repeat_interleave(self.n_heads // self.kv_heads, dim=0).view(
-            self.d_model, self.d_model
+            self.key_value_proj_dim*self.n_heads, self.d_model
         )
         mod_v = mod_v.repeat_interleave(self.n_heads // self.kv_heads, dim=0).view(
-            self.d_model, self.d_model
+            self.key_value_proj_dim*self.n_heads, self.d_model
         )
 
         # get key/value states

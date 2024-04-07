@@ -90,8 +90,6 @@ def compute_bleu_metric(preds,labels,tokenizer,metric):
     decoded_preds = [pred.strip() for pred in decoded_preds]
     decoded_labels = [label.strip() for label in decoded_labels]
 
-    print('Decoded labels')
-
     result = metric.compute(predictions=decoded_preds, references=decoded_labels)
 
     result = {"bleu": result["bleu"]}
@@ -203,7 +201,7 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, rank,dataset_name):
     return test_dict_list.append(final_metrics)
 
 
-def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name):
+def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name,steps):
     t5.train()
     epoch_train_loss = torch.zeros(2).to(rank)
     for batch in train_dataloader:
@@ -234,9 +232,11 @@ def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,met
 
     dist.all_reduce(epoch_train_loss,op=dist.ReduceOp.SUM)
     mean_train_loss = epoch_train_loss[0] / epoch_train_loss[1]
-    return mean_train_loss
+    return mean_train_loss,steps
     
-
+def get_policy_base(blocks):
+    recursive_policty = functools.partial(transformer_auto_wrap_policy,transformer_layer_cls=blocks)
+    return recursive_policty
 
 def train(
     rank,
@@ -266,16 +266,12 @@ def train(
     # t5.to(rank)
     # t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
 
-    my_auto_wrap_policy = functools.partial(
-        transformer_auto_wrap_policy,
-        transformer_layer_cls = T5Block     
-    )
-
+    my_auto_wrap_policy = get_policy_base({T5Block})
 
     torch.cuda.set_device(rank)
 
     t5.to(rank)
-    t5 = FSDP(t5, fsdp_auto_wrap_policy = my_auto_wrap_policy,
+    t5 = FSDP(t5, auto_wrap_policy = my_auto_wrap_policy,
               cpu_offload=CPUOffload(offload_params=True),
               sharding_strategy = ShardingStrategy.FULL_SHARD,
         backward_prefetch = BackwardPrefetch.BACKWARD_PRE)
@@ -492,7 +488,8 @@ def train(
     val_loss_list = []
     steps = 0
     for epoch in range(config.NUM_EPOCHS):
-        mean_train_loss = train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name)
+        mean_train_loss,steps = train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,
+                                            eval_dataloader,dataset_name,logging_name,steps)
         t5.eval()
         mean_eval_loss, eval_dict_list = validation_loop(t5, tokenizer, metric, eval_dataloader, steps, rank,dataset_name)
         
