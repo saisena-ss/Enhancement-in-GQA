@@ -203,10 +203,11 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, rank,dataset_name):
     return test_dict_list.append(final_metrics)
 
 
-def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,logging_name):
+def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name):
     t5.train()
     epoch_train_loss = torch.zeros(2).to(rank)
     for batch in train_dataloader:
+        t5.train()
         batch = {k: v.to(rank) for k, v in batch.items()}
         optimizer.zero_grad()
         outputs = t5(**batch)
@@ -220,15 +221,17 @@ def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,logging_name)
         optimizer.zero_grad()
         progress_bar.update(1)
         steps += 1
-        if steps % config.INTERVAL_STEPS == 0:
+        if steps % config.INTERVAL_STEPS == 0 and rank==0:
             print(f"Train loss after {steps} steps:{loss}")
             run.log({"Train loss 2k steps": loss})
-            if rank == 0:
-                # t5.eval()
-                torch.save(
-                    t5.state_dict(),
-                    f"{dir}/{logging_name.lower()}_t5_finetuned_steps_{steps}.pth",
-                )
+            t5.eval()
+            mean_eval_loss, eval_dict_list = validation_loop(t5, tokenizer, metric, eval_dataloader, steps, rank,dataset_name)
+            val_rouge_dict = eval_dict_list[0]
+            print(f"Step: {steps} val rogue {val_rouge_dict}")
+            run.log({f"{logging_name.lower()}_val_steps_" + k: v[0]
+                       for k, v in val_rouge_dict.items() })
+            
+
     dist.all_reduce(epoch_train_loss,op=dist.ReduceOp.SUM)
     mean_train_loss = epoch_train_loss[0] / epoch_train_loss[1]
     return mean_train_loss
@@ -489,8 +492,7 @@ def train(
     val_loss_list = []
     steps = 0
     for epoch in range(config.NUM_EPOCHS):
-        mean_train_loss = train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,logging_name)
-        
+        mean_train_loss = train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name)
         t5.eval()
         mean_eval_loss, eval_dict_list = validation_loop(t5, tokenizer, metric, eval_dataloader, steps, rank,dataset_name)
         
@@ -521,9 +523,9 @@ def train(
 
             t5.eval() # use a barrier to make sure training is done on all ranks
             dist.barrier()
-            torch.save(
-                t5.state_dict(),
-                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-            )
+            # torch.save(
+            #     t5.state_dict(),
+            #     f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
+            # )
 
     return val_rouge_dict, test_rouge_dict

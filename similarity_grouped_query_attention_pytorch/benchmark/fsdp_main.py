@@ -5,7 +5,7 @@ sys.path.insert(0, "..")
 import wandb
 import torch
 import config
-from utils import train
+from fsdp_utils import train
 import os
 import torch.distributed as dist
 
