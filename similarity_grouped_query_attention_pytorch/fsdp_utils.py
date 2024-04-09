@@ -112,7 +112,7 @@ def validation_loop(t5, tokenizer, metric, eval_dataloader, step, rank,dataset_n
     
     final_metrics = {}
     ddp_metric = torch.zeros(8).to(rank)
-
+    t5.eval()
     for eval_batch in eval_dataloader:
         eval_batch = {k: v.to(rank) for k, v in eval_batch.items()}
         eval_outputs = t5(**eval_batch)
@@ -133,7 +133,7 @@ def validation_loop(t5, tokenizer, metric, eval_dataloader, step, rank,dataset_n
         
         ddp_metric[0]+=1 # count to keep track of batches
         idx = 1
-        for k,v in val_rouge_step_metric:
+        for k,v in val_rouge_step_metric.items():
             ddp_metric[idx] = v
             idx += 1
 
@@ -144,14 +144,14 @@ def validation_loop(t5, tokenizer, metric, eval_dataloader, step, rank,dataset_n
     if rank == 0:
         mean_eval_loss = epoch_eval_loss[0]/epoch_eval_loss[1]
         idx = 1
-        for k,v in final_metrics:
-            final_metrics[k] = ddp_metric[idx]/ddp_metric[0]
+        for k,v in final_metrics.items():
+            final_metrics[k] = ddp_metric[idx].item()/ddp_metric[0].item()
             idx += 1
     else:
         final_metrics = None 
         mean_eval_loss = None
-
-    return mean_eval_loss, eval_dict_list.append(final_metrics)
+    eval_dict_list.append(final_metrics)
+    return mean_eval_loss, eval_dict_list
 
 
 
@@ -162,7 +162,7 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, rank,dataset_name):
     test_dict_list = []
     final_metrics = {}
     ddp_metric = torch.zeros(8).to(rank)
-
+    t5.eval()
     for test_batch in test_dataloader:
         test_batch = {k: v.to(rank) for k, v in test_batch.items()}
         test_batch_pred_tensors = t5.module.generate(
@@ -182,7 +182,7 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, rank,dataset_name):
         
         ddp_metric[0]+=1 # count to keep track of batches
         idx = 1
-        for k,v in metrics:
+        for k,v in metrics.items():
             ddp_metric[idx] = v
             idx += 1
 
@@ -192,13 +192,14 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, rank,dataset_name):
     
     if rank==0:
         idx = 1
-        for k,v in final_metrics:
-            final_metrics[k] = ddp_metric[idx]/ddp_metric[0]
+        for k,v in final_metrics.items():
+            final_metrics[k] = ddp_metric[idx].item()/ddp_metric[0].item()
             idx += 1
     else:
         final_metrics = None        
 
-    return test_dict_list.append(final_metrics)
+    test_dict_list.append(final_metrics)
+    return test_dict_list
 
 
 def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,metric,eval_dataloader,dataset_name,logging_name,steps):
@@ -235,7 +236,8 @@ def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,met
     return mean_train_loss,steps
     
 def get_policy_base(blocks):
-    recursive_policty = functools.partial(transformer_auto_wrap_policy,transformer_layer_cls=blocks)
+    recursive_policty = functools.partial(transformer_auto_wrap_policy,
+                                        transformer_layer_cls=blocks)
     return recursive_policty
 
 def train(
@@ -272,9 +274,10 @@ def train(
 
     t5.to(rank)
     t5 = FSDP(t5, auto_wrap_policy = my_auto_wrap_policy,
-              cpu_offload=CPUOffload(offload_params=True),
+              cpu_offload=CPUOffload(offload_params=False),
               sharding_strategy = ShardingStrategy.FULL_SHARD,
-        backward_prefetch = BackwardPrefetch.BACKWARD_PRE)
+              forward_prefetch = True,
+              backward_prefetch = BackwardPrefetch.BACKWARD_PRE)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)
@@ -502,7 +505,7 @@ def train(
             val_rouge_dict = eval_dict_list[0]
             print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
             run.log({
-                    f"{logging_name.lower()}_val_epoch_" + k: v[0]
+                    f"{logging_name.lower()}_val_epoch_" + k: v
                     for k, v in val_rouge_dict.items() })
             
             test_rouge_dict = test_dict_list[0]
