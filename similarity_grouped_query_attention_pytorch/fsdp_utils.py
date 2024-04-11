@@ -276,8 +276,8 @@ def train(
     t5 = FSDP(t5, auto_wrap_policy = my_auto_wrap_policy,
               cpu_offload=CPUOffload(offload_params=False),
               sharding_strategy = ShardingStrategy.FULL_SHARD,
-              forward_prefetch = True,
-              backward_prefetch = BackwardPrefetch.BACKWARD_PRE)
+            #   forward_prefetch = True,
+              backward_prefetch = BackwardPrefetch.BACKWARD_POST)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)
@@ -500,6 +500,9 @@ def train(
             # average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
             # for k in average_dict.keys():
             #     val_rouge_dict[k].append(average_dict[k])
+        val_rouge_dict = {}
+        test_rouge_dict = {}
+        
         if rank == 0:
             train_loss_list.append(mean_train_loss)
             val_rouge_dict = eval_dict_list[0]
