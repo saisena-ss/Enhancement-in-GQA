@@ -227,7 +227,7 @@ def train_step(t5,rank,train_dataloader,optimizer,progress_bar,run,tokenizer,met
             mean_eval_loss, eval_dict_list = validation_loop(t5, tokenizer, metric, eval_dataloader, steps, rank,dataset_name)
             val_rouge_dict = eval_dict_list[0]
             print(f"Step: {steps} val rogue {val_rouge_dict}")
-            run.log({f"{logging_name.lower()}_val_steps_" + k: v[0]
+            run.log({f"{logging_name.lower()}_val_steps_" + k: v
                        for k, v in val_rouge_dict.items() })
             
 

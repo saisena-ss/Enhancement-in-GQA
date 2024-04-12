@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=0-35:59:00
-#SBATCH --mem=32gb
+#SBATCH --mem=128gb
 #SBATCH --partition=gpu
 #SBATCH --gpus v100:1
 #SBATCH --mail-type=FAIL,BEGIN,END
@@ -19,4 +19,4 @@ module load python/gpu
 
 
 ######  Job commands go below this line #####
-python ./main.py cnn_dailymail 4 1 WGQA
+python ./fsdp_main.py cnn_dailymail 8 1 WGQA
