@@ -393,19 +393,19 @@ def train(
             loss.backward()
             epoch_train_loss.append(loss.item())
             optimizer.step()
-            # lr_scheduler.step()
+            lr_scheduler.step()
             optimizer.zero_grad()
             progress_bar.update(1)
             steps += 1
             if steps % config.INTERVAL_STEPS == 0:
                 print(f"Train loss after {steps} steps:{loss}")
                 run.log({"Train loss 2k steps": loss})
-                if rank == 0:
-                    # t5.eval()
-                    torch.save(
-                        t5.module.state_dict(),
-                        f"{dir}/{logging_name.lower()}_t5_finetuned_steps_{steps}.pth",
-                    )
+                # if rank == 0:
+                #     # t5.eval()
+                #     torch.save(
+                #         t5.module.state_dict(),
+                #         f"{dir}/{logging_name.lower()}_t5_finetuned_steps_{steps}.pth",
+                #     )
                     # t5.train()
                 # if rank == 0:
                 #     mean_eval_loss,eval_dict_list = validation_loop(t5,tokenizer,metric,eval_dataloader,steps,device)
@@ -468,11 +468,11 @@ def train(
         )
         run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
 
-        if rank == 0:
-            t5.eval()
-            torch.save(
-                t5.module.state_dict(),
-                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-            )
+        # if rank == 0:
+        #     t5.eval()
+        #     torch.save(
+        #         t5.module.state_dict(),
+        #         f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
+        #     )
 
     return val_rouge_dict, test_rouge_dict
