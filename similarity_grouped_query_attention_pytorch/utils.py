@@ -18,7 +18,7 @@ import numpy as np
 from tqdm.auto import tqdm
 import wandb
 import matplotlib.pyplot as plt
-# from t5_SGQA import convert_t5_to_gqa
+from t5_SGQA import convert_t5_to_gqa
 
 # from t5_WGQA import convert_t5_to_wgqa
 from t5_WGQA_final import convert_t5_to_wgqa
