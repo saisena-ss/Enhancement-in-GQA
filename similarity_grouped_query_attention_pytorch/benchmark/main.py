@@ -32,7 +32,7 @@ def main(rank, world_size, run,dataset_name,kv_heads,weight_flag,logging_name):
         run=run,
         model_name=config.MODEL_NAME,
         similarity_flag=False,
-        weight_flag=True,
+        weight_flag=weight_flag,
     )
     print(f"validation rogue dict:{val_rouge_dict}")
     print(f"Test rogue dict:{test_rouge_dict}")
