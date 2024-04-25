@@ -166,7 +166,7 @@ def train(
         model_name
     )
     if weight_flag:
-        t5 = convert_t5_to_wgqa(t5, kv_heads=4, weight_flag=True, if_random=if_random)
+        t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random)
     else:
         t5 = convert_t5_to_gqa(t5, kv_heads=kv_heads, similarity_flag=similarity_flag)
     t5.to(rank)
