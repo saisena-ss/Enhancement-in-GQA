@@ -59,7 +59,7 @@ if __name__ == "__main__":
     # torch.multiprocessing.spawn(
     main(
             # world_size,
-            # run,
+            run,
             dataset_name,
             kv_heads,
             weight_flag,
