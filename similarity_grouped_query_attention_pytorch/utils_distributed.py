@@ -161,7 +161,8 @@ def train(
     if os.path.exists(dir):
         shutil.rmtree(dir)
     os.makedirs(dir)
-    device = torch.device("cuda", rank)
+    # device = torch.device("cuda", rank)
+    device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
         model_name
     )
@@ -169,8 +170,8 @@ def train(
         t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random)
     else:
         t5 = convert_t5_to_gqa(t5, kv_heads=kv_heads, similarity_flag=similarity_flag)
-    t5.to(rank)
-    t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
+    t5.to(device_id)
+    t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[device_id])
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)

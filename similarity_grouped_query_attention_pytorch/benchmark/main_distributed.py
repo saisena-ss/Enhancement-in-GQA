@@ -10,19 +10,21 @@ import os
 import torch.distributed as dist
 
 
-def setup(rank, world_size):
+def setup(world_size):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+    dist.init_process_group("nccl", world_size=world_size)
+    rank = dist.get_rank()
+    # torch.cuda.set_device(rank)
+    return rank
 
 
 def cleanup():
     dist.destroy_process_group()
 
 
-def main(rank,run,dataset_name,kv_heads,weight_flag,logging_name):
-    setup(rank, world_size)
+def main(world_size,run,dataset_name,kv_heads,weight_flag,logging_name):
+    rank = setup(world_size)
     val_rouge_dict, test_rouge_dict = train(
         rank,
         world_size,
