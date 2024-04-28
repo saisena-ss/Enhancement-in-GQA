@@ -56,4 +56,4 @@ if __name__ == "__main__":
     )
 
     world_size = torch.cuda.device_count()
-    torch.multiprocessing.spawn(main, args=(world_size,run), nprocs=world_size, join=True)
+    torch.multiprocessing.spawn(main, args=(world_size,run,dataset_name,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)
