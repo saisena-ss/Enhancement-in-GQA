@@ -161,7 +161,7 @@ def train(
     if os.path.exists(dir):
         shutil.rmtree(dir)
     os.makedirs(dir)
-    # device = torch.device("cuda", rank)
+    device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
         model_name
