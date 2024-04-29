@@ -54,6 +54,6 @@ if __name__ == "__main__":
         entity=config.WANDB_ENTITY,
         group=dataset_name+"_"+logging_name.upper(),
     )
-
+    rank = dist.get_rank()
     world_size = torch.cuda.device_count()
-    torch.multiprocessing.spawn(main, args=(world_size,run,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)
+    torch.multiprocessing.spawn(main, args=(rank,world_size,run,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)
