@@ -146,8 +146,8 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, device,dataset_name):
 
 
 def train(
-    # rank,
-    # world_size,
+    rank,
+    world_size,
     dataset_name,
     kv_heads: int,
     logging_name: str,
@@ -161,7 +161,8 @@ def train(
     if os.path.exists(dir):
         shutil.rmtree(dir)
     os.makedirs(dir)
-    device = torch.device("cuda:0")
+    device = torch.device("cuda", rank)
+    # device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
         model_name
     )
@@ -169,8 +170,8 @@ def train(
         t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random)
     else:
         t5 = convert_t5_to_gqa(t5, kv_heads=kv_heads, similarity_flag=similarity_flag)
-    t5.to(device)
-    # t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
+    t5.to(rank)
+    t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)
@@ -334,28 +335,28 @@ def train(
         batch_size=config.TOKENIZE_BATCH_SIZE,
     )
 
-    # train_sampler = DistributedSampler(tokenized_datasets_train)
+    train_sampler = DistributedSampler(tokenized_datasets_train)
     train_dataloader = DataLoader(
         tokenized_datasets_train,
         batch_size=config.BATCH_SIZE,
-        # sampler=train_sampler,
+        sampler=train_sampler,
         collate_fn=data_collator,
     )
 
-    # eval_sampler = DistributedSampler(tokenized_datasets_val, shuffle=False)
+    eval_sampler = DistributedSampler(tokenized_datasets_val, shuffle=False)
     eval_dataloader = DataLoader(
         tokenized_datasets_val,
         batch_size=config.VAL_BATCH_SIZE,
         collate_fn=data_collator,
-        # sampler=eval_sampler,
+        sampler=eval_sampler,
     )
 
-    # test_sampler = DistributedSampler(tokenized_datasets_test, shuffle=False)
+    test_sampler = DistributedSampler(tokenized_datasets_test, shuffle=False)
     test_dataloader = DataLoader(
         tokenized_datasets_test,
         batch_size=config.VAL_BATCH_SIZE,
         collate_fn=data_collator,
-        # sampler=test_sampler,
+        sampler=test_sampler,
     )
 
     num_training_steps = config.NUM_EPOCHS * len(train_dataloader)
@@ -429,50 +430,50 @@ def train(
         train_loss_list.append(mean_train_loss)
 
         t5.eval()
-        # if rank == 0:
-        mean_eval_loss, eval_dict_list = validation_loop(
-            t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
-        )
-        key_names = eval_dict_list[0].keys()
-        average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
-        for k in average_dict.keys():
-            val_rouge_dict[k].append(average_dict[k])
-        print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
-        run.log(
-            {
-                f"{logging_name.lower()}_val_epoch_" + k: v[0]
-                for k, v in val_rouge_dict.items()
-            }
-        )
+        if rank == 0:
+            mean_eval_loss, eval_dict_list = validation_loop(
+                t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
+            )
+            key_names = eval_dict_list[0].keys()
+            average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
+            for k in average_dict.keys():
+                val_rouge_dict[k].append(average_dict[k])
+            print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
+            run.log(
+                {
+                    f"{logging_name.lower()}_val_epoch_" + k: v[0]
+                    for k, v in val_rouge_dict.items()
+                }
+            )
         # print(rank)
-        # if rank == 0:
-        print(f"Started testing for step {steps}")
-        test_dict_list = testing_loop(
-            t5, tokenizer, metric, test_dataloader, device,dataset_name
-        )
-        key_names = test_dict_list[0].keys()
-        test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
-        if dataset_name=='wmt14':
-            print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
-        else:
-            print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
-        run.log(
-            {
-                f"{logging_name.lower()}_test_epoch_" + k: v
-                for k, v in test_rouge_dict.items()
-            }
-        )
+        if rank == 0:
+            print(f"Started testing for step {steps}")
+            test_dict_list = testing_loop(
+                t5, tokenizer, metric, test_dataloader, device,dataset_name
+            )
+            key_names = test_dict_list[0].keys()
+            test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
+            if dataset_name=='wmt14':
+                print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
+            else:
+                print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
+            run.log(
+                {
+                    f"{logging_name.lower()}_test_epoch_" + k: v
+                    for k, v in test_rouge_dict.items()
+                }
+            )
 
         print(
             f"Train and val loss after {epoch} epoch:{mean_train_loss}, val:{mean_eval_loss}"
         )
         run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
 
-        if rank == 0:
-            t5.eval()
-            torch.save(
-                t5.module.state_dict(),
-                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-            )
+        # if rank == 0:
+        #     t5.eval()
+        #     torch.save(
+        #         t5.module.state_dict(),
+        #         f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
+        #     )
 
     return val_rouge_dict, test_rouge_dict

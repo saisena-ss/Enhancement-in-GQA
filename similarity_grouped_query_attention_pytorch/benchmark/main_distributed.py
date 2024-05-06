@@ -5,7 +5,7 @@ sys.path.insert(0, "..")
 import wandb
 import torch
 import config
-from utils import train
+from utils_distributed import train
 import os
 import torch.distributed as dist
 
@@ -21,11 +21,11 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def main(run,dataset_name,kv_heads,weight_flag,logging_name):
-    # setup(rank, world_size)
+def main(rank,world_size,run,dataset_name,kv_heads,weight_flag,logging_name):
+    setup(rank, world_size)
     val_rouge_dict, test_rouge_dict = train(
-        # rank,
-        # world_size,
+        rank,
+        world_size,
         dataset_name = dataset_name,
         kv_heads=int(kv_heads),
         logging_name=logging_name,
@@ -36,7 +36,7 @@ def main(run,dataset_name,kv_heads,weight_flag,logging_name):
     )
     print(f"validation rogue dict:{val_rouge_dict}")
     print(f"Test rogue dict:{test_rouge_dict}")
-    # cleanup()
+    cleanup()
 
 
 if __name__ == "__main__":
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     if dataset_name not in ["arxiv","wmt14","pubmed","cnn_dailymail","multi_news"]:
         raise "Usage Error dataset should be in : arxiv,wmt14,pubmed,cnn_dailymail,multi_news"
-    
+
     wandb.login(key=config.WANDB_API_KEY)
     run = wandb.init(
         project=config.WANDB_PROJECT,
@@ -54,16 +54,6 @@ if __name__ == "__main__":
         entity=config.WANDB_ENTITY,
         group=dataset_name+"_"+logging_name.upper(),
     )
-
+    rank = dist.get_rank()
     world_size = torch.cuda.device_count()
-    # torch.multiprocessing.spawn(
-    main(
-            # world_size,
-            run,
-            dataset_name,
-            kv_heads,
-            weight_flag,
-            logging_name
-        )
-        # nprocs=world_size,
-        # join=True,
+    torch.multiprocessing.spawn(main, args=(rank,world_size,run,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)
