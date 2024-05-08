@@ -369,18 +369,20 @@ def train(
     )
     if dataset_name == "wmt14":
         metric = load("bleu")
+        val_rouge_dict = {
+        "bleu": [],
+        "gen_len": []}
     else:
         metric = load("rouge")
-
-    progress_bar = tqdm(range(num_training_steps))
-    val_rouge_dict = {
+        val_rouge_dict = {
         "rouge1": [],
         "rouge2": [],
         "rougeL": [],
         "rougeLsum": [],
         "gen_len": [],
     }
-
+    progress_bar = tqdm(range(num_training_steps))
+   
     train_loss_list = []
     val_loss_list = []
     steps = 0
