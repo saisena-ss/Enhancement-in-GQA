@@ -471,11 +471,11 @@ def train(
         )
         run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
 
-        # if rank == 0:
-        #     t5.eval()
-        #     torch.save(
-        #         t5.module.state_dict(),
-        #         f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-        #     )
+        if rank == 0:
+            t5.eval()
+            torch.save(
+                t5.module.state_dict(),
+                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
+            )
 
     return val_rouge_dict, test_rouge_dict
