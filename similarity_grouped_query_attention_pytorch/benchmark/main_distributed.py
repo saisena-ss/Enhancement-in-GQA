@@ -21,7 +21,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def main(rank,world_size,run,dataset_name,kv_heads,weight_flag,logging_name):
+def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_name):
     setup(rank, world_size)
     val_rouge_dict, test_rouge_dict = train(
         rank,
@@ -54,6 +54,8 @@ if __name__ == "__main__":
         entity=config.WANDB_ENTITY,
         group=dataset_name+"_"+logging_name.upper(),
     )
-    rank = dist.get_rank()
+    #dist.init_process_group('nccl')
+    #rank = dist.get_rank()
     world_size = torch.cuda.device_count()
-    torch.multiprocessing.spawn(main, args=(rank,world_size,run,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)
+    #device_id = rank % world_size
+    torch.multiprocessing.spawn(main, args=(world_size,run,dataset_name,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper()), nprocs=world_size, join=True)

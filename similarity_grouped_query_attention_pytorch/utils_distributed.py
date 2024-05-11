@@ -160,9 +160,9 @@ def train(
     dir = logging_name.upper()
     if os.path.exists(dir):
         shutil.rmtree(dir)
-    os.makedirs(dir)
+    #os.makedirs(dir)
     device = torch.device("cuda", rank)
-    # device_id = rank % world_size
+    device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
         model_name
     )
@@ -173,7 +173,7 @@ def train(
     t5.to(rank)
     t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False,padding=True,truncation=True)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)
 
     def preprocess_function(
@@ -369,6 +369,12 @@ def train(
     )
     if dataset_name == "wmt14":
         metric = load("bleu")
+    else:
+        metric = load("rouge")
+
+    progress_bar = tqdm(range(num_training_steps))
+    if dataset_name == "wmt14":
+        metric = load("bleu")
         val_rouge_dict = {
         "bleu": [],
         "gen_len": []}
@@ -381,8 +387,7 @@ def train(
         "rougeLsum": [],
         "gen_len": [],
     }
-    progress_bar = tqdm(range(num_training_steps))
-   
+
     train_loss_list = []
     val_loss_list = []
     steps = 0
@@ -432,39 +437,39 @@ def train(
         train_loss_list.append(mean_train_loss)
 
         t5.eval()
-        if rank == 0:
-            mean_eval_loss, eval_dict_list = validation_loop(
-                t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
-            )
-            key_names = eval_dict_list[0].keys()
-            average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
-            for k in average_dict.keys():
-                val_rouge_dict[k].append(average_dict[k])
-            print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
-            run.log(
-                {
-                    f"{logging_name.lower()}_val_epoch_" + k: v[0]
-                    for k, v in val_rouge_dict.items()
-                }
-            )
+        # if rank == 0:
+        mean_eval_loss, eval_dict_list = validation_loop(
+            t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
+        )
+        key_names = eval_dict_list[0].keys()
+        average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
+        for k in average_dict.keys():
+            val_rouge_dict[k].append(average_dict[k])
+        print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
+        run.log(
+            {
+                f"{logging_name.lower()}_val_epoch_" + k: v[0]
+                for k, v in val_rouge_dict.items()
+            }
+        )
         # print(rank)
-        if rank == 0:
-            print(f"Started testing for step {steps}")
-            test_dict_list = testing_loop(
-                t5, tokenizer, metric, test_dataloader, device,dataset_name
-            )
-            key_names = test_dict_list[0].keys()
-            test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
-            if dataset_name=='wmt14':
-                print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
-            else:
-                print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
-            run.log(
-                {
-                    f"{logging_name.lower()}_test_epoch_" + k: v
-                    for k, v in test_rouge_dict.items()
-                }
-            )
+        # if rank == 0:
+        print(f"Started testing for step {steps}")
+        test_dict_list = testing_loop(
+            t5, tokenizer, metric, test_dataloader, device,dataset_name
+        )
+        key_names = test_dict_list[0].keys()
+        test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
+        if dataset_name=='wmt14':
+            print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
+        else:
+            print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
+        run.log(
+            {
+                f"{logging_name.lower()}_test_epoch_" + k: v
+                for k, v in test_rouge_dict.items()
+            }
+        )
 
         print(
             f"Train and val loss after {epoch} epoch:{mean_train_loss}, val:{mean_eval_loss}"
