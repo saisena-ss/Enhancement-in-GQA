@@ -174,7 +174,7 @@ def train(
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=t5)
-
+    artifact = wandb.Artifact(name=f"t5_model_{logging_name}", type="model")
     def preprocess_function(
         examples,
         dataset_name:str = dataset_name,
@@ -473,11 +473,13 @@ def train(
         )
         run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
 
-        if rank == 0:
-            t5.eval()
-            torch.save(
-                t5.module.state_dict(),
-                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-            )
+        # if rank == 0:
+            # t5.eval()
+        torch.save(
+            t5.module.state_dict(),
+            f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth",
+        )
+        artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
+        run.log_artifact(artifact)
 
     return val_rouge_dict, test_rouge_dict
