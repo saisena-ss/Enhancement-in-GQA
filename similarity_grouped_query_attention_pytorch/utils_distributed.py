@@ -28,7 +28,8 @@ import os
 import shutil
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, T5Tokenizer
-
+import nltk
+nltk.download('punkt')
 
 def compute_metrics(predictions, labels, tokenizer, metric):
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
@@ -160,7 +161,7 @@ def train(
     dir = logging_name.upper()
     if os.path.exists(dir):
         shutil.rmtree(dir)
-    #os.makedirs(dir)
+    os.makedirs(dir)
     device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(

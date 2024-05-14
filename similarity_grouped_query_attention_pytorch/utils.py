@@ -19,7 +19,6 @@ from tqdm.auto import tqdm
 import wandb
 import matplotlib.pyplot as plt
 from t5_SGQA import convert_t5_to_gqa
-
 # from t5_WGQA import convert_t5_to_wgqa
 from t5_WGQA_final import convert_t5_to_wgqa
 import torch.nn as nn
@@ -28,7 +27,8 @@ import os
 import shutil
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, T5Tokenizer
-
+import nltk
+nltk.download('punkt')
 
 def compute_metrics(predictions, labels, tokenizer, metric):
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
