@@ -17,4 +17,3 @@ sentencepiece
 torch
 
 matplotlib
-plotly
