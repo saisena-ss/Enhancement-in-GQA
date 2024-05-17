@@ -30,6 +30,7 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, T5Tokenizer
 import nltk
 nltk.download('punkt')
+import pandas as pd
 
 def compute_metrics(predictions, labels, tokenizer, metric):
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
@@ -142,7 +143,6 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, device,dataset_name):
                     metric,
                 )
             )
-
     return test_dict_list
 
 
@@ -159,9 +159,9 @@ def train(
     if_random: bool = False,
 ):
     dir = logging_name.upper()
-    if os.path.exists(dir):
-        shutil.rmtree(dir)
-    os.makedirs(dir)
+    # if os.path.exists(dir):
+    #     shutil.rmtree(dir)
+    os.makedirs(dir,exist_ok=True)
     device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
@@ -392,6 +392,7 @@ def train(
     train_loss_list = []
     val_loss_list = []
     steps = 0
+    weights_dict = {str(k):None for k in range(config.NUM_EPOCHS)}
     for epoch in range(config.NUM_EPOCHS):
         t5.train()
         epoch_train_loss = []
@@ -479,10 +480,29 @@ def train(
 
         # if rank == 0:
         # t5.eval()
-        torch.save(
-            t5.module.state_dict(),
-            f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth",
-        )
-        artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
-        run.log_artifact(artifact)
+        # torch.save(
+        #     t5.module.state_dict(),
+        #     f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth",
+        # )
+        # artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
+        # run.log_artifact(artifact)
+        if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
+            weight_vec = []
+            for param in t5.module.parameters():
+                sh = param.shape
+                if len(sh)==2 and sh[0]==12 and sh[1]==1:
+                    weight_vec.append(param)
+            weights = torch.cat(weight_vec,0)
+            weights = np.array(weights.cpu().detach()).tolist()
+            weight_list = [i[0] for i in weights]
+            weights_dict[str(epoch)] = weight_list
+    if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
+        df = pd.DataFrame.from_dict(weights_dict)
+        wandb_table = wandb.Table(dataframe=df)
+        plt.style.use('bmh')
+        cols = list(weights_dict.keys())
+        df[cols].plot.kde(figsize=(5,5),)
+        plt.xlabel("Weight")    
+        run.log({"Weights plot": plt})
+        run.log({"Weights table": wandb_table})
     return val_rouge_dict, test_rouge_dict
