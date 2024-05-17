@@ -158,10 +158,10 @@ def train(
     weight_flag: bool = False,
     if_random: bool = False,
 ):
-    dir = logging_name.upper()
+    # dir = logging_name.upper()
     # if os.path.exists(dir):
     #     shutil.rmtree(dir)
-    os.makedirs(dir,exist_ok=True)
+    # os.makedirs(dir,exist_ok=True)
     device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
