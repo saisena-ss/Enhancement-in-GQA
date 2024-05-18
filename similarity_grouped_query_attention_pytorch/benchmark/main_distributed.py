@@ -34,8 +34,9 @@ def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_n
         similarity_flag=False,
         weight_flag=weight_flag,
     )
-    print(f"validation rogue dict:{val_rouge_dict}")
-    print(f"Test rogue dict:{test_rouge_dict}")
+    if rank==0:
+        print(f"validation rogue dict:{val_rouge_dict}")
+        print(f"Test rogue dict:{test_rouge_dict}")
     cleanup()
 
 

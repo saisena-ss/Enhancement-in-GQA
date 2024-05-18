@@ -19,7 +19,7 @@ from tqdm.auto import tqdm
 import wandb
 import matplotlib.pyplot as plt
 from t5_SGQA import convert_t5_to_gqa
-
+import torch.distributed as dist
 # from t5_WGQA import convert_t5_to_wgqa
 from t5_WGQA_final import convert_t5_to_wgqa
 import torch.nn as nn
@@ -62,7 +62,7 @@ def compute_metrics(predictions, labels, tokenizer, metric):
         np.count_nonzero(pred != tokenizer.pad_token_id) for pred in predictions
     ]
     result["gen_len"] = np.mean(prediction_lens)
-
+    
     return {k: round(v, 4) for k, v in result.items()}
 
 
@@ -76,11 +76,11 @@ def compute_bleu_metric(preds,labels,tokenizer,metric):
 
     decoded_preds = [pred.strip() for pred in decoded_preds]
     decoded_labels = [label.strip() for label in decoded_labels]
-    print(decoded_preds)
-    print('Decoded labels')
-    print(decoded_labels)
+    # print(decoded_preds)
+    # print('Decoded labels')
+    # print(decoded_labels)
     result = metric.compute(predictions=decoded_preds, references=decoded_labels)
-    print(result)
+    # print(result)
     result = {"bleu": result["bleu"]}
 
     prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
@@ -96,12 +96,20 @@ def get_avg(eval_dict_list, key_name: str):
 def validation_loop(t5, tokenizer, metric, eval_dataloader, step, device,dataset_name):
     epoch_eval_loss = []
     eval_dict_list = []
-    print(f"Started evaluation for step {step}")
+    print(f"Started evaluation for step {step}") if dist.get_rank() == 0 else None
+
     for eval_batch in eval_dataloader:
         eval_batch = {k: v.to(device) for k, v in eval_batch.items()}
         eval_outputs = t5(**eval_batch)
         eval_loss = eval_outputs.loss
-        epoch_eval_loss.append(eval_loss.item())
+        
+        reduced_loss = eval_loss.clone()
+        dist.all_reduce(reduced_loss,op=dist.ReduceOp.SUM)
+        reduced_loss = reduced_loss/dist.get_world_size()
+        
+        epoch_eval_loss.append(reduced_loss.item())
+        # print(epoch_eval_loss,eval_loss)
+        
         eval_batch_pred_tensors = t5.module.generate(
             eval_batch["input_ids"], max_length=config.MAX_TARGET_LENGTH
         )
@@ -111,8 +119,10 @@ def validation_loop(t5, tokenizer, metric, eval_dataloader, step, device,dataset
         else:
 
             val_rouge_step_metric = compute_metrics(
-                eval_batch_pred_tensors.cpu(), eval_batch["labels"].cpu(), tokenizer, metric
-            )
+                eval_batch_pred_tensors.cpu(), eval_batch["labels"].cpu(), tokenizer, metric)
+            
+            # print(val_rouge_step_metric)
+            
         eval_dict_list.append(val_rouge_step_metric)
     mean_eval_loss = sum(epoch_eval_loss) / len(epoch_eval_loss)
     return mean_eval_loss, eval_dict_list
@@ -158,10 +168,10 @@ def train(
     weight_flag: bool = False,
     if_random: bool = False,
 ):
-    # dir = logging_name.upper()
-    # if os.path.exists(dir):
-    #     shutil.rmtree(dir)
-    # os.makedirs(dir,exist_ok=True)
+    dir = logging_name.upper()
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
+    os.makedirs(dir,exist_ok=True)
     device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
@@ -401,108 +411,125 @@ def train(
             outputs = t5(**batch)
             loss = outputs.loss
             loss.backward()
-            epoch_train_loss.append(loss.item())
+            # epoch_train_loss.append(loss.item())
             optimizer.step()
             lr_scheduler.step()
             optimizer.zero_grad()
-            progress_bar.update(1)
-            steps += 1
-            if steps % config.INTERVAL_STEPS == 0:
-                print(f"Train loss after {steps} steps:{loss}")
-                run.log({"Train loss 2k steps": loss})
-                # if rank == 0:
-                #     # t5.eval()
-                #     torch.save(
-                #         t5.module.state_dict(),
-                #         f"{dir}/{logging_name.lower()}_t5_finetuned_steps_{steps}.pth",
-                #     )
-                    # t5.train()
-                # if rank == 0:
-                #     mean_eval_loss,eval_dict_list = validation_loop(t5,tokenizer,metric,eval_dataloader,steps,device)
-                #     val_loss_list.append(mean_eval_loss)
-                #     key_names = eval_dict_list[0].keys()
-                #     average_dict = {k:get_avg(eval_dict_list,k) for k in key_names}
-                #     for k in average_dict.keys():
-                #         val_rouge_dict[k].append(average_dict[k])
-                #     print(f'Steps: {steps} val rogue {val_rouge_dict}')
-                #     wandb.log({f"{logging_name.lower()}_val_steps_{steps}_"+k:v[0] for k,v in val_rouge_dict.items()})
+            
+            
+            reduced_loss = loss.clone()
+            dist.all_reduce(reduced_loss)
+            epoch_train_loss.append(reduced_loss.item())
+            
+            if rank==0:
+                progress_bar.update(1)
+                steps += 1
+                if steps % config.INTERVAL_STEPS == 0:
+                    print(f"Train loss after {steps} steps:{loss}")
+                    run.log({"Train loss 2k steps": loss})
 
-                # if rank==0:
-                #     print(f"Started testing for step {steps}")
-                #     test_dict_list = testing_loop(t5,tokenizer,metric,test_dataloader,steps,device)
-                #     key_names = test_dict_list[0].keys()
-                #     test_rouge_dict = {k:get_avg(test_dict_list,k) for k in key_names}
-                #     wandb.log({f"{logging_name.lower()}_test_steps_{steps}_"+k:v for k,v in test_rouge_dict.items()})
-
-                # t5.train()
-        mean_train_loss = sum(epoch_train_loss) / len(epoch_train_loss)
-        train_loss_list.append(mean_train_loss)
+        if rank==0:
+            mean_train_loss = sum(epoch_train_loss) / len(epoch_train_loss)
+            train_loss_list.append(mean_train_loss)
 
         t5.eval()
         # if rank == 0:
         mean_eval_loss, eval_dict_list = validation_loop(
             t5, tokenizer, metric, eval_dataloader, steps, device,dataset_name
         )
+        
+        
         key_names = eval_dict_list[0].keys()
         average_dict = {k: get_avg(eval_dict_list, k) for k in key_names}
         for k in average_dict.keys():
-            val_rouge_dict[k].append(average_dict[k])
-        print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
-        run.log(
-            {
-                f"{logging_name.lower()}_val_epoch_" + k: v[0]
-                for k, v in val_rouge_dict.items()
-            }
-        )
+            val_rouge_dict[k]=average_dict[k]
+        
+        #gather all eval_dict_list from all GPUs
+        all_val_dict = [None] * dist.get_world_size()
+        
+        dist.all_gather_object(all_val_dict,val_rouge_dict)
+
+        # print(rank,all_val_dict)
+        
+        if rank==0:
+            val_rouge_dict = {}
+            average_dict = {k: get_avg(all_val_dict, k) for k in key_names}
+            for k in average_dict.keys():
+                val_rouge_dict[k] = average_dict[k]
+             
+            print(f"Epoch: {epoch} val rogue {val_rouge_dict}")
+            run.log(
+                {
+                    f"{logging_name.lower()}_val_epoch_" + k: v
+                    for k, v in val_rouge_dict.items()
+                }
+            )
+        dist.barrier()
+        
         # print(rank)
-        # if rank == 0:
-        print(f"Started testing for step {steps}")
+        if rank == 0:
+            print(f"Started testing for step {steps}")
         test_dict_list = testing_loop(
             t5, tokenizer, metric, test_dataloader, device,dataset_name
         )
         key_names = test_dict_list[0].keys()
+
         test_rouge_dict = {k: get_avg(test_dict_list, k) for k in key_names}
-        if dataset_name=='wmt14':
-            print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
-        else:
-            print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
-        run.log(
-            {
-                f"{logging_name.lower()}_test_epoch_" + k: v
-                for k, v in test_rouge_dict.items()
-            }
-        )
+        
+        #gather all eval_dict_list from all GPUs
+        all_test_dict = [None] * dist.get_world_size()
+        
+        dist.all_gather_object(all_test_dict,test_rouge_dict)
 
-        print(
-            f"Train and val loss after {epoch} epoch:{mean_train_loss}, val:{mean_eval_loss}"
-        )
-        run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
+        # print(rank,test_rouge_dict)
+        
+        if rank==0:
+            test_rouge_dict = {}
+            average_dict = {k: get_avg(all_test_dict, k) for k in key_names}
+            for k in average_dict.keys():
+                test_rouge_dict[k] = average_dict[k]
+                
+            if dataset_name=='wmt14':
+                print(f"Epoch: {epoch} BLEU {test_rouge_dict}")
+            else:
+                print(f"Epoch: {epoch} test rogue {test_rouge_dict}")
+            run.log(
+                {
+                    f"{logging_name.lower()}_test_epoch_" + k: v
+                    for k, v in test_rouge_dict.items()
+                }
+            )
 
-        # if rank == 0:
-        # t5.eval()
-        # torch.save(
-        #     t5.module.state_dict(),
-        #     f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth",
-        # )
+            print(
+            f"Train and val loss after {epoch} epoch:{mean_train_loss}, val:{mean_eval_loss}")
+            run.log({"Train Loss": mean_train_loss, "Val Loss": mean_eval_loss})
+
+            # print(logging_name)
+            t5.eval()
+            torch.save(
+                t5.module.state_dict(),
+                f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
+            )
+        dist.barrier()
         # artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
         # run.log_artifact(artifact)
-        if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
-            weight_vec = []
-            for param in t5.module.parameters():
-                sh = param.shape
-                if len(sh)==2 and sh[0]==12 and sh[1]==1:
-                    weight_vec.append(param)
-            weights = torch.cat(weight_vec,0)
-            weights = np.array(weights.cpu().detach()).tolist()
-            weight_list = [i[0] for i in weights]
-            weights_dict[str(epoch)] = weight_list
-    if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
-        df = pd.DataFrame.from_dict(weights_dict)
-        wandb_table = wandb.Table(dataframe=df)
-        plt.style.use('bmh')
-        cols = list(weights_dict.keys())
-        df[cols].plot.kde(figsize=(5,5),)
-        plt.xlabel("Weight")    
-        run.log({"Weights plot": plt})
-        run.log({"Weights table": wandb_table})
+    #     if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
+    #         weight_vec = []
+    #         for param in t5.module.parameters():
+    #             sh = param.shape
+    #             if len(sh)==2 and sh[0]==12 and sh[1]==1:
+    #                 weight_vec.append(param)
+    #         weights = torch.cat(weight_vec,0)
+    #         weights = np.array(weights.cpu().detach()).tolist()
+    #         weight_list = [i[0] for i in weights]
+    #         weights_dict[str(epoch)] = weight_list
+    # if logging_name.endswith("WGQA") or logging_name.endswith("WMQA"):
+    #     df = pd.DataFrame.from_dict(weights_dict)
+    #     wandb_table = wandb.Table(dataframe=df)
+    #     plt.style.use('bmh')
+    #     cols = list(weights_dict.keys())
+    #     df[cols].plot.kde(figsize=(5,5),)
+    #     plt.xlabel("Weight")    
+    #     run.log({"Weights plot": plt})
+        # run.log({"Weights table": wandb_table})
     return val_rouge_dict, test_rouge_dict
