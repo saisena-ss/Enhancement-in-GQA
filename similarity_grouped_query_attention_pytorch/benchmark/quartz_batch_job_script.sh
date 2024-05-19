@@ -21,5 +21,7 @@ module load python/gpu
 ######  Job commands go below this line #####
 python ./main_distributed.py multi_news 6 1 WGQA
 python ./main_distributed.py multi_news 6 0 GQA
-#python ./main_distributed.py pubmed 1 0 MQA
-#python ./main_distributed.py pubmed 1 1 WMQA
+#python ./main_distributed.py multi_news 6 1 RANDWGQA
+#python ./main_distributed.py multi_news 1 0 MQA
+#python ./main_distributed.py multi_news 1 1 WMQA
+#python ./main_distributed.py multi_news 1 1 RANDWMQA
