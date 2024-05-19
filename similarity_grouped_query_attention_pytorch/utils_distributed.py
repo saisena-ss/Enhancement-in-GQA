@@ -513,23 +513,27 @@ def train(
         dist.barrier()
         # artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
         # run.log_artifact(artifact)
+        if rank ==0:
+            if logging_name.endswith("WGQA") or logging_name.endswith("WMQA") or logging_name.endswith("RANDWMQA") or logging_name.endswith("RANDWGQA"):
+                weight_vec = []
+                for param in t5.module.parameters():
+                    sh = param.shape
+                    if len(sh)==2 and sh[0]==12 and sh[1]==1:
+                        weight_vec.append(param)
+                weights = torch.cat(weight_vec,0)
+                weights = np.array(weights.cpu().detach()).tolist()
+                weight_list = [i[0] for i in weights]
+                weights_dict[str(epoch)] = weight_list
+        dist.barrier()
+    if rank == 0:
         if logging_name.endswith("WGQA") or logging_name.endswith("WMQA") or logging_name.endswith("RANDWMQA") or logging_name.endswith("RANDWGQA"):
-            weight_vec = []
-            for param in t5.module.parameters():
-                sh = param.shape
-                if len(sh)==2 and sh[0]==12 and sh[1]==1:
-                    weight_vec.append(param)
-            weights = torch.cat(weight_vec,0)
-            weights = np.array(weights.cpu().detach()).tolist()
-            weight_list = [i[0] for i in weights]
-            weights_dict[str(epoch)] = weight_list
-    if logging_name.endswith("WGQA") or logging_name.endswith("WMQA") or logging_name.endswith("RANDWMQA") or logging_name.endswith("RANDWGQA"):
-        df = pd.DataFrame.from_dict(weights_dict)
-        wandb_table = wandb.Table(dataframe=df)
-        plt.style.use('bmh')
-        cols = list(weights_dict.keys())
-        df[cols].plot.kde(figsize=(5,5),)
-        plt.xlabel("Weight")    
-        run.log({"Weights plot": plt})
-        run.log({"Weights table": wandb_table})
+            df = pd.DataFrame.from_dict(weights_dict)
+            wandb_table = wandb.Table(dataframe=df)
+            plt.style.use('bmh')
+            cols = list(weights_dict.keys())
+            df[cols].plot.kde(figsize=(5,5),)
+            plt.xlabel("Weight")    
+            run.log({"Weights plot": plt})
+            run.log({"Weights table": wandb_table})
+    dist.barrier()
     return val_rouge_dict, test_rouge_dict
