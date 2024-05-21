@@ -378,19 +378,19 @@ def train(
         num_warmup_steps=0,
         num_training_steps=num_training_steps,
     )
-    if dataset_name == "wmt14":
-        metric = load("bleu")
-    else:
-        metric = load("rouge")
+    # if dataset_name == "wmt14":
+    #     metric = load("bleu")
+    # else:
+    #     metric = load("rouge")
 
     progress_bar = tqdm(range(num_training_steps))
     if dataset_name == "wmt14":
-        metric = load("bleu")
+        metric = load("bleu",experiment_id=logging_name)
         val_rouge_dict = {
         "bleu": [],
         "gen_len": []}
     else:
-        metric = load("rouge")
+        metric = load("rouge",experiment_id=logging_name)
         val_rouge_dict = {
         "rouge1": [],
         "rouge2": [],
