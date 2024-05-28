@@ -530,12 +530,14 @@ def train(
     if weight_flag:
         if rank == 0:
             df = pd.DataFrame.from_dict(weights_dict)
-            wandb_table = wandb.Table(dataframe=df)
+            df.to_csv(f"{logging_name}.csv",index=False)
+            run.log_artifact(f"./{logging_name}.csv")
+            # wandb_table = wandb.Table(dataframe=df)
             plt.style.use('bmh')
             cols = list(weights_dict.keys())
             df[cols].plot.kde(figsize=(5,5),)
             plt.xlabel("Weight")    
             run.log({"Weights plot": plt})
-            run.log({"Weights table": wandb_table})
+            # run.log({"Weights table": wandb_table})
     dist.barrier()
     return val_rouge_dict, test_rouge_dict
