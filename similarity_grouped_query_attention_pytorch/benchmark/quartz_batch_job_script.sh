@@ -25,3 +25,7 @@ python ./main_distributed.py multi_news 6 0 GQA false
 #python ./main_distributed.py multi_news 1 0 MQA false
 #python ./main_distributed.py multi_news 1 1 WMQA false
 #python ./main_distributed.py multi_news 1 1 RANDWMQA true
+#python ./main_distributed.py multi_news 6 1 COLWGQA false col
+#python ./main_distributed.py multi_news 6 1 ROWWGQA false row
+#python ./main_distributed.py multi_news 1 1 ROWWMQA false row
+#python ./main_distributed.py multi_news 1 1 COLWMQA false col
