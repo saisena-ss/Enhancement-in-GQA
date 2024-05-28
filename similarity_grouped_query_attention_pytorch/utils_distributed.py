@@ -515,8 +515,8 @@ def train(
         dist.barrier()
         # artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
         # run.log_artifact(artifact)
-        if rank ==0:
-            if logging_name.endswith("WGQA") or logging_name.endswith("WMQA") or logging_name.endswith("RANDWMQA") or logging_name.endswith("RANDWGQA"):
+        if weight_flag:
+            if rank ==0:
                 weight_vec = []
                 for param in t5.module.parameters():
                     sh = param.shape
@@ -527,8 +527,8 @@ def train(
                 weight_list = [i[0] for i in weights]
                 weights_dict[str(epoch)] = weight_list
         dist.barrier()
-    if rank == 0:
-        if logging_name.endswith("WGQA") or logging_name.endswith("WMQA") or logging_name.endswith("RANDWMQA") or logging_name.endswith("RANDWGQA"):
+    if weight_flag:
+        if rank == 0:
             df = pd.DataFrame.from_dict(weights_dict)
             wandb_table = wandb.Table(dataframe=df)
             plt.style.use('bmh')
