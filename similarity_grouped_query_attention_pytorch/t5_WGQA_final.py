@@ -71,10 +71,13 @@ class WeightT5SelfAttention(T5Attention):
         kv_heads: int,
         weight_flag: bool = False,
         if_random: bool = False,
+        weight_row_column = "",
     ):
         config = create_t5_config_from_block(t5_decoder_attention_block)
         super(WeightT5SelfAttention, self).__init__(config)
-
+        
+        assert weight_row_column in ['row','col',""], "wrong input for weight_row_column - [row,col,'']"
+        
         # Transfer complete layers from the provided T5 attention block
         self.q = t5_decoder_attention_block.q
         self.k = t5_decoder_attention_block.k
@@ -94,12 +97,30 @@ class WeightT5SelfAttention(T5Attention):
         self.pruned_heads = t5_decoder_attention_block.pruned_heads
         self.gradient_checkpointing = t5_decoder_attention_block.gradient_checkpointing
         self.if_random = if_random
+        self.weight_row_column = weight_row_column
+        
         if if_random:
-            self.wk1 = nn.Parameter(torch.randn((self.n_heads, 1)))
-            self.wv1 = nn.Parameter(torch.randn((self.n_heads, 1)))
+            if weight_row_column == "":
+                self.wk1 = nn.Parameter(torch.randn((self.n_heads, 1)))
+                self.wv1 = nn.Parameter(torch.randn((self.n_heads, 1)))
+            elif weight_row_column == "row":
+                self.wk1 = nn.Parameter(torch.randn((self.n_heads, self.d_model)))
+                self.wv1 = nn.Parameter(torch.randn((self.n_heads, self.d_model)))
+            else:
+                self.wk1 = nn.Parameter(torch.randn((self.n_heads, self.kv_heads)))
+                self.wv1 = nn.Parameter(torch.randn((self.n_heads, self.kv_heads)))   
+            
         else:
-            self.wk1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
-            self.wv1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
+            if weight_row_column=="":
+                self.wk1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
+                self.wv1 = nn.Parameter(torch.full((self.n_heads, 1), self.kv_heads/self.n_heads))
+            elif weight_row_column == "row":
+                self.wk1 = nn.Parameter(torch.full((self.n_heads, self.d_model), self.kv_heads/self.n_heads))
+                self.wv1 = nn.Parameter(torch.full((self.n_heads, self.d_model), self.kv_heads/self.n_heads))
+            else:
+                self.wk1 = nn.Parameter(torch.full((self.n_heads, self.key_value_proj_dim), self.kv_heads/self.n_heads))
+                self.wv1 = nn.Parameter(torch.full((self.n_heads, self.key_value_proj_dim), self.kv_heads/self.n_heads))
+                
             #     self.params = nn.ParameterDict({
         #         f"key": nn.Parameter(torch.randn((self.n_heads,1))),
         #         f"value": nn.Parameter(torch.randn((self.n_heads,1))),
@@ -197,22 +218,31 @@ class WeightT5SelfAttention(T5Attention):
         query_states = shape(
             self.q(hidden_states)
         )  # (batch_size, n_heads, seq_length, dim_per_head)
-
-        mod_k = torch.multiply(
-            self.k.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),
-            self.wk1.view(self.n_heads, 1, 1),
-        )
+        
+        if self.weight_row_column == "":
+            mod_k = torch.multiply(
+                self.k.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),
+                self.wk1.view(self.n_heads, 1, 1),)
+            
+            mod_v = torch.multiply(
+            self.v.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),
+            self.wv1.view(self.n_heads, 1, 1), )
+      
+        elif self.weight_row_column == "row":
+            mod_k = torch.einsum("nkd,nd->nkd",self.k.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),self.wk1)
+            mod_v = torch.einsum("nkd,nd->nkd",self.v.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),self.wv1)
+        
+        elif self.weight_row_column == "col":
+            mod_k = torch.einsum("nkd,nk->nkd",self.k.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),self.wk1)
+            mod_v = torch.einsum("nkd,nk->nkd",self.v.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),self.wv1)
+        
         mod_k = mod_k.view(
             self.kv_heads,
             self.n_heads // self.kv_heads,
             self.key_value_proj_dim,
             self.d_model,
         ).sum(axis=1)
-
-        mod_v = torch.multiply(
-            self.v.weight.view(self.n_heads, self.key_value_proj_dim, self.d_model),
-            self.wv1.view(self.n_heads, 1, 1),
-        )
+        
         mod_v = mod_v.view(
             self.kv_heads,
             self.n_heads // self.kv_heads,
@@ -318,6 +348,7 @@ def convert_t5_to_wgqa(
     weight_flag: bool = False,
     inplace: bool = False,
     if_random: bool = False,
+    weight_row_column = ""
 ):
 
     out = module if inplace else deepcopy(module)
@@ -325,10 +356,10 @@ def convert_t5_to_wgqa(
     # use custom attention blocks in decoder
     for layer in out.decoder.block:
         layer.layer[0].SelfAttention = WeightT5SelfAttention(
-            layer.layer[0].SelfAttention, kv_heads, weight_flag, if_random=if_random
+            layer.layer[0].SelfAttention, kv_heads, weight_flag, if_random=if_random,weight_row_column=weight_row_column
         )
         layer.layer[1].EncDecAttention = WeightT5SelfAttention(
-            layer.layer[1].EncDecAttention, kv_heads, weight_flag, if_random=if_random
+            layer.layer[1].EncDecAttention, kv_heads, weight_flag, if_random=if_random,weight_row_column= weight_row_column
         )
 
     return out
@@ -359,7 +390,7 @@ if __name__ == "__main__":
     for kv_heads in [4]:
         for weight_flag in [True]:
             t5_gqa = convert_t5_to_wgqa(
-                t5, kv_heads=kv_heads, weight_flag=weight_flag, inplace=False
+                t5, kv_heads=kv_heads, weight_flag=weight_flag, inplace=False,weight_row_column = "col"
             )
             # print(t5_gqa.parameters())
             t5_gqa.eval()
