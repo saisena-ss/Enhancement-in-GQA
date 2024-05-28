@@ -523,8 +523,8 @@ def train(
                     if len(sh)==2 and sh[0]==12 and sh[1] in [1,768,64]:
                         weight_vec.append(param)
                 weights = torch.cat(weight_vec,0)
-                weights = np.array(weights.cpu().detach()).tolist()
-                weight_list = [i[0] for i in weights]
+                weights = np.array(weights.flatten().cpu().detach()).tolist()
+                weight_list = [i for i in weights]
                 weights_dict[str(epoch)] = weight_list
         dist.barrier()
     if weight_flag:
