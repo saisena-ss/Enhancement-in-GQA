@@ -286,11 +286,11 @@ def train(
             "stas/wmt14-en-de-pre-processed",  split=f"train[:{config.PERCENT_DATA}%]"
         )
         test_data = load_dataset(
-            "stas/wmt14-en-de-pre-processed"
+            "stas/wmt14-en-de-pre-processed",split="test"
         )
 
         val_data = load_dataset(
-            "stas/wmt14-en-de-pre-processed"
+            "stas/wmt14-en-de-pre-processed",split="validation"
         )
     elif dataset_name == "cnn_dailymail":
         train_data = load_dataset(
@@ -309,11 +309,11 @@ def train(
         )
 
         test_data = load_dataset(
-            dataset_name]"
+            dataset_name,split="test"
         )
 
         val_data = load_dataset(
-            dataset_name]"
+            dataset_name,split="validation"
         )
 
     if dataset_name == "wmt14":
