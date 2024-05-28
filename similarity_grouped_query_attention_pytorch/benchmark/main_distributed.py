@@ -21,7 +21,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_name,if_random):
+def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_name,if_random,weight_row_column):
     setup(rank, world_size)
     val_rouge_dict, test_rouge_dict = train(
         rank,
@@ -33,7 +33,8 @@ def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_n
         model_name=config.MODEL_NAME,
         similarity_flag=False,
         weight_flag=weight_flag,
-        if_random=if_random
+        if_random=if_random,
+        weight_row_column = weight_row_column 
     )
     if rank==0:
         print(f"validation rogue dict:{val_rouge_dict}")
@@ -42,7 +43,7 @@ def main(rank:int,world_size:int,run,dataset_name,kv_heads,weight_flag,logging_n
 
 
 if __name__ == "__main__":
-    dataset_name, kv_heads,weight_flag,logging_name,rand = sys.argv[1:]
+    dataset_name, kv_heads,weight_flag,logging_name,rand,weight_row_column = sys.argv[1:]
 
     weight_flag = int(weight_flag)==1
     assert rand in ["false","true"], "The rand should should be false or true"
@@ -63,4 +64,4 @@ if __name__ == "__main__":
     #rank = dist.get_rank()
     world_size = torch.cuda.device_count()
     #device_id = rank % world_size
-    torch.multiprocessing.spawn(main, args=(world_size,run,dataset_name,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper(),if_random), nprocs=world_size, join=True)
+    torch.multiprocessing.spawn(main, args=(world_size,run,dataset_name,kv_heads,weight_flag,dataset_name+"_"+logging_name.upper(),if_random,weight_row_column), nprocs=world_size, join=True)

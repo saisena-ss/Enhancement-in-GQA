@@ -167,7 +167,9 @@ def train(
     similarity_flag: bool = False,
     weight_flag: bool = False,
     if_random: bool = False,
+    weight_row_column:str = ""
 ):
+    
     # dir = logging_name.upper()
     # if os.path.exists(dir):
     #     shutil.rmtree(dir)
@@ -178,7 +180,7 @@ def train(
         model_name
     )
     if weight_flag:
-        t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random)
+        t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random,weight_row_column=weight_row_column)
     else:
         t5 = convert_t5_to_gqa(t5, kv_heads=kv_heads, similarity_flag=similarity_flag)
     t5.to(rank)
@@ -518,7 +520,7 @@ def train(
                 weight_vec = []
                 for param in t5.module.parameters():
                     sh = param.shape
-                    if len(sh)==2 and sh[0]==12 and sh[1]==1:
+                    if len(sh)==2 and sh[0]==12 and sh[1] in [1,768,64]:
                         weight_vec.append(param)
                 weights = torch.cat(weight_vec,0)
                 weights = np.array(weights.cpu().detach()).tolist()
