@@ -107,8 +107,8 @@ class WeightT5SelfAttention(T5Attention):
                 self.wk1 = nn.Parameter(torch.randn((self.n_heads, self.d_model)))
                 self.wv1 = nn.Parameter(torch.randn((self.n_heads, self.d_model)))
             else:
-                self.wk1 = nn.Parameter(torch.randn((self.n_heads, self.kv_heads)))
-                self.wv1 = nn.Parameter(torch.randn((self.n_heads, self.kv_heads)))   
+                self.wk1 = nn.Parameter(torch.randn((self.n_heads, self.key_value_proj_dim)))
+                self.wv1 = nn.Parameter(torch.randn((self.n_heads, self.key_value_proj_dim)))   
             
         else:
             if weight_row_column=="":
