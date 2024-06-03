@@ -156,33 +156,20 @@ def testing_loop(t5, tokenizer, metric, test_dataloader, device,dataset_name):
     return test_dict_list
 
 
-def train(
+def mha_metrics_main(
     rank,
     world_size,
     dataset_name,
-    kv_heads: int,
     logging_name: str,
     run,
     model_name: str = config.MODEL_NAME,
-    similarity_flag: bool = False,
-    weight_flag: bool = False,
-    if_random: bool = False,
-    weight_row_column:str = ""
 ):
     
-    # dir = logging_name.upper()
-    # if os.path.exists(dir):
-    #     shutil.rmtree(dir)
-    # os.makedirs(dir,exist_ok=True)
     device = torch.device("cuda", rank)
     device_id = rank % world_size
     t5: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(
         model_name
     )
-    # if weight_flag:
-    #     t5 = convert_t5_to_wgqa(t5, kv_heads=kv_heads, weight_flag=True, if_random=if_random,weight_row_column=weight_row_column)
-    # else:
-    #     t5 = convert_t5_to_gqa(t5, kv_heads=kv_heads, similarity_flag=similarity_flag)
     t5.to(rank)
     t5 = torch.nn.parallel.DistributedDataParallel(t5, device_ids=[rank])
 
@@ -271,12 +258,8 @@ def train(
             model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
-    data_dir = "data"
-
     if dataset_name == "pubmed" or dataset_name == "arxiv":
-        train_data = load_dataset(
-            "scientific_papers",dataset_name,split=f"train[:{config.PERCENT_DATA}%]"
-        )
+       
         test_data = load_dataset(
             "scientific_papers",dataset_name, split=f"test[:{config.PERCENT_DATA}%]"
         )
@@ -284,9 +267,7 @@ def train(
             "scientific_papers",dataset_name, split=f"validation[:{config.PERCENT_DATA}%]"
         )
     elif dataset_name == "wmt14":
-        train_data = load_dataset(
-            "stas/wmt14-en-de-pre-processed",  split=f"train[:{config.PERCENT_DATA}%]"
-        )
+        
         test_data = load_dataset(
             "stas/wmt14-en-de-pre-processed",split="test"
         )
@@ -295,9 +276,7 @@ def train(
             "stas/wmt14-en-de-pre-processed",split="validation"
         )
     elif dataset_name == "cnn_dailymail":
-        train_data = load_dataset(
-            "cnn_dailymail",'3.0.0',   split=f"train[:{config.PERCENT_DATA}%]"
-        )
+        
         test_data = load_dataset(
             "cnn_dailymail",'3.0.0', split=f"test[:{config.PERCENT_DATA}%]"
         )
@@ -306,10 +285,6 @@ def train(
             "cnn_dailymail",'3.0.0', split=f"validation[:{config.PERCENT_DATA}%]"
         )
     else:
-        train_data = load_dataset(
-            dataset_name,  split=f"train[:{config.PERCENT_DATA}%]"
-        )
-
         test_data = load_dataset(
             dataset_name,split="test"
         )
@@ -329,12 +304,6 @@ def train(
     elif dataset_name == "trivia_qa":
         remove_columns=[]
 
-    tokenized_datasets_train = train_data.map(
-        preprocess_function,
-        batched=True,
-        remove_columns=remove_columns,
-        batch_size=config.TOKENIZE_BATCH_SIZE,
-    )
     tokenized_datasets_val = val_data.map(
         preprocess_function,
         batched=True,
@@ -346,14 +315,6 @@ def train(
         batched=True,
         remove_columns=remove_columns,
         batch_size=config.TOKENIZE_BATCH_SIZE,
-    )
-
-    train_sampler = DistributedSampler(tokenized_datasets_train)
-    train_dataloader = DataLoader(
-        tokenized_datasets_train,
-        batch_size=config.BATCH_SIZE,
-        sampler=train_sampler,
-        collate_fn=data_collator,
     )
 
     eval_sampler = DistributedSampler(tokenized_datasets_val, shuffle=False)
@@ -371,21 +332,11 @@ def train(
         collate_fn=data_collator,
         sampler=test_sampler,
     )
-
-    num_training_steps = config.NUM_EPOCHS * len(train_dataloader)
-    optimizer = AdamW(t5.parameters(), lr=config.LEARNING_RATE)
-    lr_scheduler = get_scheduler(
-        name="linear",
-        optimizer=optimizer,
-        num_warmup_steps=0,
-        num_training_steps=num_training_steps,
-    )
+   
     # if dataset_name == "wmt14":
     #     metric = load("bleu")
     # else:
     #     metric = load("rouge")
-
-    progress_bar = tqdm(range(num_training_steps))
     if dataset_name == "wmt14":
         metric = load("bleu",experiment_id=logging_name)
         val_rouge_dict = {
@@ -401,38 +352,8 @@ def train(
         "gen_len": [],
     }
 
-    # train_loss_list = []
-    # val_loss_list = []
     steps = 0
-    # weights_dict = {str(k):None for k in range(config.NUM_EPOCHS)}
-    # for epoch in range(config.NUM_EPOCHS):
-    #     t5.train()
-    #     epoch_train_loss = []
-    #     for batch in train_dataloader:
-    #         batch = {k: v.to(device) for k, v in batch.items()}
-    #         outputs = t5(**batch)
-    #         loss = outputs.loss
-    #         loss.backward()
-    #         # epoch_train_loss.append(loss.item())
-    #         optimizer.step()
-    #         lr_scheduler.step()
-    #         optimizer.zero_grad()
-            
-            
-    #         reduced_loss = loss.clone()
-    #         dist.all_reduce(reduced_loss)
-    #         epoch_train_loss.append(reduced_loss.item())
-            
-    #         if rank==0:
-    #             progress_bar.update(1)
-    #             steps += 1
-    #             if steps % config.INTERVAL_STEPS == 0:
-    #                 print(f"Train loss after {steps} steps:{loss}")
-    #                 run.log({"Train loss 2k steps": loss})
-
-    #     if rank==0:
-    #         mean_train_loss = sum(epoch_train_loss) / len(epoch_train_loss)
-    #         train_loss_list.append(mean_train_loss)
+    
 
     t5.eval()
     # if rank == 0:
@@ -505,39 +426,7 @@ def train(
         print(
         f"val loss :{mean_eval_loss}")
         run.log({"Val Loss": mean_eval_loss})
-
-        # print(logging_name)
         t5.eval()
-        # torch.save(
-        #     t5.module.state_dict(),
-        #     f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}.pth",
-        # )
+   
     dist.barrier()
-    # artifact.add_file(local_path=f"{dir}/{logging_name.lower()}_t5_finetuned_epoch_{epoch}_{dataset_name}_{logging_name}.pth")
-    # run.log_artifact(artifact)
-    # if weight_flag:
-    #     if rank ==0:
-    #         weight_vec = []
-    #         for param in t5.module.parameters():
-    #             sh = param.shape
-    #             if len(sh)==2 and sh[0]==12 and sh[1] in [1,768,64]:
-    #                 weight_vec.append(param)
-    #         weights = torch.cat(weight_vec,0)
-    #         weights = np.array(weights.flatten().cpu().detach()).tolist()
-    #         weight_list = [i for i in weights]
-    #         weights_dict[str(epoch)] = weight_list
-    # dist.barrier()
-    # if weight_flag:
-    #     if rank == 0:
-    #         df = pd.DataFrame.from_dict(weights_dict)
-    #         df.to_csv(f"{logging_name}.csv",index=False)
-    #         run.log_artifact(f"./{logging_name}.csv")
-    #         # wandb_table = wandb.Table(dataframe=df)
-    #         plt.style.use('bmh')
-    #         cols = list(weights_dict.keys())
-    #         df[cols].plot.kde(figsize=(5,5),)
-    #         plt.xlabel("Weight")    
-    #         run.log({"Weights plot": plt})
-    #         # run.log({"Weights table": wandb_table})
-    # dist.barrier()
     return val_rouge_dict, test_rouge_dict
