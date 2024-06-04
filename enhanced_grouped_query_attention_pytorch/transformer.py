@@ -7,7 +7,7 @@ from torch import Tensor, nn
 from torch.nn.modules.transformer import _get_activation_fn
 from torchscale.component.xpos_relative_position import XPOS
 
-from similarity_grouped_query_attention_pytorch.attention import MultiheadGQA
+from enhanced_grouped_query_attention_pytorch.attention import MultiheadGQA
 
 
 class GQATransformerEncoderLayer(nn.Module):
